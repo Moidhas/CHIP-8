@@ -18,7 +18,7 @@ std::stack<unsigned short> return_addrs;
 
 // Special Registers
 unsigned short I;
-unsigned short PC = 512;
+unsigned short PC = 0x200;
 byte delay_timer;
 byte sound_timer;
 
@@ -66,7 +66,7 @@ void handleKeyboard(SDL_Scancode scancode) {
 // remember to add error checking where needed (i.e. SDL_INIT)
 int main(int argc, char *argv[]) {
     if (argc != 2) return -1;
-    std::ifstream program(argv[1], std::ifstream::binary);
+    std::ifstream program{argv[1], std::ifstream::binary};
 
     if (!program.is_open()) {
         std::cout << "UNABLE TO OPEN FILE" << std::endl; 
@@ -74,9 +74,10 @@ int main(int argc, char *argv[]) {
     }
 
     program.seekg(0, program.end);
-    int length = program.tellg();
+    int size = program.tellg();
     program.seekg(0, program.beg);
-    program.read((char * ) (MEM + PC), length);
+    program.read((char * ) (MEM + PC), size);
+    program.close();
 
     const byte FONT_SET[80] = {
         0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
@@ -99,198 +100,65 @@ int main(int argc, char *argv[]) {
 
     memcpy(MEM + 80, FONT_SET, sizeof(FONT_SET));
 
-
-    SDL_Window *window = nullptr;  
-    SDL_Renderer *renderer = nullptr;
-
-    SDL_Init(SDL_INIT_VIDEO);
-    SDL_CreateWindowAndRenderer(SCREEN_WIDTH * PIXEL_SCALE, SCREEN_HEIGHT * PIXEL_SCALE, 0, &window, &renderer);
-    SDL_RenderSetScale(renderer, PIXEL_SCALE, PIXEL_SCALE);
-    byte display[SCREEN_WIDTH][SCREEN_HEIGHT] = { 0 };
-    
-
-    srand((unsigned) time(NULL));    
-
-    // SDL_Surface *surface = SDL_GetWindowSurface(window);
-    // SDL_FillRect(surface, NULL, SDL_MapRGB(surface->format, 0xFF, 0xFF, 0xFF));
-    // SDL_UpdateWindowSurface(window);
-    SDL_Event e;
     bool quit = false;
     unsigned short opcode;
 
     while (!quit) {
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-        SDL_RenderClear(renderer);
-        Uint32 startTime = SDL_GetTicks();
-        delay_timer -= delay_timer > 0 ? 1 : 0;
-        sound_timer -= sound_timer > 0 ? 1 : 0;
-
-        memcpy(&opcode, MEM + PC, 2);
+        opcode = (MEM[PC] << 8) | MEM[PC + 1];
+        std::cout << PC << ": ";
         PC += 2;
-        byte nibble = opcode & 0x000F;
-        byte X = (opcode & 0x00F0) >> 4;
-        byte Y = (opcode & 0x0F00) >> 8;
-        byte N = (opcode & 0xF000) >> 12;
-        byte NN = (opcode & 0xFF00) >> 8;
-        byte NNN = (opcode & 0xFFF0) >> 4;
 
-        switch(nibble) {
-            case 0x0:
-                switch(NNN) {
-                    case 0x0E0:
-                        std::cout << "CLEAR" << std::endl;
-                        for (int i = 0; i < SCREEN_WIDTH; ++i) {
-                            for (int j = 0; j < SCREEN_HEIGHT; ++j) {
-                                display[i][j] = 0;
-                            }
-                        }
-                        break;
-                    case 0x0EE:
-                        std::cout << "RETURN" << std::endl;
-                        PC = return_addrs.top();
-                        return_addrs.pop();
-                        break;
-                }
+        unsigned short NNN = opcode & 0x0FFF;
+        byte X = (opcode & 0x0F00) >> 8;
+        byte Y = (opcode & 0x00F0) >> 4;
+        byte N = opcode & 0x000F;
+        byte NN = opcode & 0x00FF;
+
+        switch(opcode & 0xF000) {
+            case 0x0000:
+                std::cout << "clear" << std::endl;
                 break;
-            case 0x1:
-                std::cout << "JUMP" << std::endl;
-                PC = NNN;
+            case 0x1000:
+                std::cout << "jump" << std::endl;
+                PC = NNN - 2;
                 break;
-            case 0x2:
-                std::cout << "CALL function" << std::endl;
-                return_addrs.push(PC);
-                PC = NNN;
+            case 0x2000:
                 break;
-            case 0x3:
-                std::cout << "SKIP" << std::endl;
-                if (regs[X] == NN) PC += 2; 
+            case 0x3000:
                 break;
-            case 0x4:
-                std::cout << "SKIP" << std::endl;
-                if (regs[X] != NN) PC += 2; 
+            case 0x4000:
                 break;
-            case 0x5:
-                std::cout << "SKIP" << std::endl;
-                if (regs[X] == regs[Y]) PC += 2;
+            case 0x5000:
                 break;
-            case 0x6:
-                std::cout << "SET REG" << std::endl;
+            case 0x6000:
+                std::cout << "set register" << std::endl;
                 regs[X] = NN;
                 break;
-            case 0x7:
-                std::cout << "ADD TO REG" << std::endl;
+            case 0x7000:
+                std::cout << "add to register" << std::endl;
                 regs[X] += NN;
                 break;
-            case 0x8:
-                switch(N) {
-                    case 0x0:
-                        regs[X] = regs[Y];
-                        break;
-                    case 0x1:
-                        regs[X] |= regs[Y];
-                        break; 
-                    case 0x2:
-                        regs[X] &= regs[Y];
-                        break;
-                    case 0x3:
-                        regs[X] ^= regs[Y];
-                        break;
-                    case 0x4:
-                        regs[0xF] = (regs[X] + regs[Y] > 0xFF);
-                        regs[X] += regs[Y];
-                        break;
-                    case 0x5:
-                        regs[0xF] = (regs[X] > regs[Y]);
-                        regs[X] = regs[X] - regs[Y];
-                        break;
-                    case 0x6:
-                        regs[0xF] = regs[X] & 0x1;
-                        regs[X] >>= 1;
-                        break;
-                    case 0x7:
-                        regs[15] = (regs[Y] > regs[X]);
-                        regs[X] = regs[Y] - regs[X];
-                        break;
-                    case 0xE:
-                        regs[0xF] = (regs[X] & (0x1 << 7)) >> 7;
-                        regs[X] <<= 1;
-                        break;
-                }
+            case 0x8000:
                 break;
-            case 0x9:
-                std::cout << "SKIP" << std::endl;
-                if (regs[X] != regs[Y]) PC += 2;
+            case 0x9000:
                 break;
-            case 0xA:
-                std::cout << "SET I To NNN" << std::endl;
+            case 0xA000:
+                std::cout << "set I" << std::endl;
                 I = NNN;
                 break;
-            case 0xB:
-                PC = NNN + regs[X];
+            case 0xB000:
                 break;
-            case 0xC:
-                regs[X] = (rand() % 0xFF) & NN;
+            case 0xC000:
                 break;
-            case 0xD:
-                {
-                    std::cout << "DRAW" << std::endl;
-                    byte startX = regs[X] % SCREEN_WIDTH;
-                    byte startY = regs[Y] % SCREEN_HEIGHT;
-                    regs[0xF] = 0;
-                    for (byte i = 0; i < N; ++i) {
-                        byte pixelWide = MEM[I + i];
-                        byte y = startY + i;
-                        if (y > SCREEN_HEIGHT) break;
-                        for (byte k = 7; k >= 0; --k) {
-                            byte bit = (pixelWide >> k) & 1;
-                            byte x = startX + k;
-                            if (x > SCREEN_WIDTH) break;
-                            regs[0xF] = bit && display[x][y] ? 1 : 0;
-                            display[x][y] ^= bit;
-                        }
-                    }
-                }
+            case 0xD000:
+                std::cout << "draw" << std::endl;
                 break;
-            case 0xE:
-                std::cout << "NONE" << std::endl;
+            case 0xE000:
                 break;
-            case 0xF:
-                std::cout << "NONE" << std::endl;
+            case 0xF000:
                 break;
         }
 
-        while (SDL_PollEvent(&e)) {
-            if (e.type == SDL_QUIT) {
-                quit = true;
-            } else if (e.type == SDL_KEYDOWN) {
-                handleKeyboard(e.key.keysym.scancode);
-            }
-        }
-
-        for (int x = 0; x < SCREEN_WIDTH; ++x) {
-            for(int y = 0; y < SCREEN_HEIGHT; ++y) {
-                if (display[x][y]) {
-                    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-                } else {
-                    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-                }
-                SDL_RenderDrawPoint(renderer, x, y);
-            }
-        }
-
-        SDL_RenderPresent(renderer);
-        const int frameDelay = SPF  - (SDL_GetTicks() - startTime); 
-        if (frameDelay > 0) {
-            SDL_Delay(frameDelay);
-        }
-
-        if (sound_timer > 0) {
-            // play sound
-        }
+        SDL_Delay(1000);
     }
-
-    SDL_DestroyRenderer(renderer);
-    SDL_DestroyWindow(window);
-    SDL_Quit();
-    program.close();
 }
