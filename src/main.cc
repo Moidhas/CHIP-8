@@ -5,13 +5,12 @@
 #include <fstream>
 #include <stack>
 typedef unsigned char byte;
-typedef bool bit;
 
 const int FPS = 60;
 const int SPF = 1000 / 60;  
 const int PIXEL_SCALE = 10;
-const int SCREEN_WIDTH = 64;
 const int SCREEN_HEIGHT = 32;
+const int SCREEN_WIDTH = 64;
 
 byte MEM[4096];
 std::stack<unsigned short> return_addrs;
@@ -63,6 +62,30 @@ void handleKeyboard(SDL_Scancode scancode) {
             break;
     }
 }
+
+void clear(byte display[SCREEN_HEIGHT][SCREEN_WIDTH]) {
+    for (int i = 0; i < SCREEN_HEIGHT; ++i) 
+        for (int j = 0; j < SCREEN_WIDTH; ++j) 
+            display[i][j] = 0; 
+}
+
+void draw(byte *V, byte X, byte Y, byte N, unsigned short I, byte display[SCREEN_HEIGHT][SCREEN_WIDTH]) {
+    V[0xF] = 0;
+    int y = V[Y] % SCREEN_HEIGHT;
+    for (unsigned short i = I; i < N && y < SCREEN_HEIGHT; ++i) {
+        int x = V[X] % SCREEN_WIDTH;
+        byte row = MEM[i];
+        for (byte mask = 0x80; mask != 0 && x < SCREEN_WIDTH; mask >>= 1) {
+            if (row & mask && display[x][y]) 
+                V[0xF] = 1; 
+            display[x][y] ^= (row & mask);
+            ++x;
+        }
+        ++y;
+    }
+}
+
+
 // remember to add error checking where needed (i.e. SDL_INIT)
 int main(int argc, char *argv[]) {
     if (argc != 2) return -1;
@@ -100,6 +123,8 @@ int main(int argc, char *argv[]) {
 
     memcpy(MEM + 80, FONT_SET, sizeof(FONT_SET));
 
+    byte display[SCREEN_HEIGHT][SCREEN_WIDTH] = { 0 };
+
     bool quit = false;
     unsigned short opcode;
 
@@ -116,11 +141,12 @@ int main(int argc, char *argv[]) {
 
         switch(opcode & 0xF000) {
             case 0x0000:
+                clear(display);
                 std::cout << "clear" << std::endl;
                 break;
             case 0x1000:
-                std::cout << "jump" << std::endl;
                 PC = NNN - 2;
+                std::cout << "jump" << std::endl;
                 break;
             case 0x2000:
                 break;
@@ -131,27 +157,28 @@ int main(int argc, char *argv[]) {
             case 0x5000:
                 break;
             case 0x6000:
-                std::cout << "set register" << std::endl;
                 regs[X] = NN;
+                std::cout << "set register" << std::endl;
                 break;
             case 0x7000:
-                std::cout << "add to register" << std::endl;
                 regs[X] += NN;
+                std::cout << "add to register" << std::endl;
                 break;
             case 0x8000:
                 break;
             case 0x9000:
                 break;
             case 0xA000:
-                std::cout << "set I" << std::endl;
                 I = NNN;
+                std::cout << "set I" << std::endl;
                 break;
             case 0xB000:
                 break;
             case 0xC000:
                 break;
             case 0xD000:
-                std::cout << "draw" << std::endl;
+                draw(regs, X,  Y, N, I, display);
+                std::cout << "display" << std::endl;
                 break;
             case 0xE000:
                 break;
