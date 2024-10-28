@@ -170,7 +170,7 @@ int main(int argc, char *argv[]) {
                 std::cout << "clear" << std::endl;
                 break;
             case 0x1000:
-                PC = NNN - 2;
+                PC = NNN;
                 std::cout << "jump" << std::endl;
                 break;
             case 0x2000:
