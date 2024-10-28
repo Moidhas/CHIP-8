@@ -76,24 +76,27 @@ void clear(SDL_Renderer *renderer, byte display[SCREEN_HEIGHT][SCREEN_WIDTH]) {
 void draw(byte *V, byte X, byte Y, byte N, unsigned short I, byte display[SCREEN_HEIGHT][SCREEN_WIDTH]) {
     V[0xF] = 0;
     int y = V[Y] % SCREEN_HEIGHT;
-    for (unsigned short i = I; i < N && y < SCREEN_HEIGHT; ++i) {
+    for (unsigned short i = I; i < I + N && y < SCREEN_HEIGHT; ++i) {
         int x = V[X] % SCREEN_WIDTH;
         byte row = MEM[i];
         for (byte mask = 0x80; mask != 0 && x < SCREEN_WIDTH; mask >>= 1) {
-            if (row & mask && display[x][y]) 
+            if (row & mask && display[y][x]) 
                 V[0xF] = 1; 
-            display[x][y] ^= (row & mask);
+            display[y][x] ^= (row & mask);
             ++x;
         }
         ++y;
     }
 }
 
-void drawFrame(SDL_Renderer *renderer, byte display[SCREEN_HEIGHT][SCREEN_WIDTH]) {
+// renders to backbuffer.
+void renderFrame(SDL_Renderer *renderer, byte display[SCREEN_HEIGHT][SCREEN_WIDTH]) {
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
     for (int y = 0; y < SCREEN_HEIGHT; ++y) {
         for (int x = 0; x < SCREEN_WIDTH; ++x) { 
-            if (display[y][x]) SDL_RenderDrawPoint(renderer, x,  y);
+            if (display[y][x]) {
+                SDL_RenderDrawPoint(renderer, x,  y);
+            } 
         }
     }
 }
@@ -216,7 +219,7 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        drawFrame(renderer, display);
+        renderFrame(renderer, display);
         SDL_RenderPresent(renderer);
     }
 
