@@ -137,6 +137,7 @@ int main(int argc, char *argv[]) {
 
     SDL_Window *window = nullptr;  
     SDL_Renderer *renderer = nullptr;
+    SDL_Event e;
 
     SDL_Init(SDL_INIT_VIDEO);
     SDL_CreateWindowAndRenderer(SCREEN_WIDTH * PIXEL_SCALE, SCREEN_HEIGHT * PIXEL_SCALE, 0, &window, &renderer);
@@ -207,10 +208,19 @@ int main(int argc, char *argv[]) {
                 break;
         }
 
+        while (SDL_PollEvent(&e)) {
+            if (e.type == SDL_QUIT) {
+                quit = true;
+            } else if (e.type == SDL_KEYDOWN) {
+                handleKeyboard(e.key.keysym.scancode);
+            }
+        }
+
         drawFrame(renderer, display);
         SDL_RenderPresent(renderer);
     }
 
+    SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     window = nullptr;
     renderer = nullptr;
