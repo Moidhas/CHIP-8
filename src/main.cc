@@ -1,3 +1,5 @@
+#include "SDL/SDL_render.h"
+#include "SDL/SDL_video.h"
 #include <SDL/SDL.h>
 #include <cstdlib>
 #include <iostream>
@@ -63,7 +65,9 @@ void handleKeyboard(SDL_Scancode scancode) {
     }
 }
 
-void clear(byte display[SCREEN_HEIGHT][SCREEN_WIDTH]) {
+void clear(SDL_Renderer *renderer, byte display[SCREEN_HEIGHT][SCREEN_WIDTH]) {
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    SDL_RenderClear(renderer);
     for (int i = 0; i < SCREEN_HEIGHT; ++i) 
         for (int j = 0; j < SCREEN_WIDTH; ++j) 
             display[i][j] = 0; 
@@ -85,6 +89,14 @@ void draw(byte *V, byte X, byte Y, byte N, unsigned short I, byte display[SCREEN
     }
 }
 
+void drawFrame(SDL_Renderer *renderer, byte display[SCREEN_HEIGHT][SCREEN_WIDTH]) {
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    for (int y = 0; y < SCREEN_HEIGHT; ++y) {
+        for (int x = 0; x < SCREEN_WIDTH; ++x) { 
+            if (display[y][x]) SDL_RenderDrawPoint(renderer, x,  y);
+        }
+    }
+}
 
 // remember to add error checking where needed (i.e. SDL_INIT)
 int main(int argc, char *argv[]) {
@@ -123,12 +135,21 @@ int main(int argc, char *argv[]) {
 
     memcpy(MEM + 80, FONT_SET, sizeof(FONT_SET));
 
+    SDL_Window *window = nullptr;  
+    SDL_Renderer *renderer = nullptr;
+
+    SDL_Init(SDL_INIT_VIDEO);
+    SDL_CreateWindowAndRenderer(SCREEN_WIDTH * PIXEL_SCALE, SCREEN_HEIGHT * PIXEL_SCALE, 0, &window, &renderer);
+    SDL_RenderSetScale(renderer, PIXEL_SCALE, PIXEL_SCALE);
     byte display[SCREEN_HEIGHT][SCREEN_WIDTH] = { 0 };
 
     bool quit = false;
     unsigned short opcode;
 
     while (!quit) {
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        SDL_RenderClear(renderer);
+
         opcode = (MEM[PC] << 8) | MEM[PC + 1];
         std::cout << PC << ": ";
         PC += 2;
@@ -141,7 +162,7 @@ int main(int argc, char *argv[]) {
 
         switch(opcode & 0xF000) {
             case 0x0000:
-                clear(display);
+                clear(renderer, display);
                 std::cout << "clear" << std::endl;
                 break;
             case 0x1000:
@@ -186,6 +207,12 @@ int main(int argc, char *argv[]) {
                 break;
         }
 
-        SDL_Delay(1000);
+        drawFrame(renderer, display);
+        SDL_RenderPresent(renderer);
     }
+
+    SDL_DestroyWindow(window);
+    window = nullptr;
+    renderer = nullptr;
+    SDL_Quit();
 }
