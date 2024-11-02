@@ -5,6 +5,7 @@
 #include <iostream>
 #include <cstring>
 #include <fstream>
+#include <random>
 #include <stack>
 typedef unsigned char byte;
 
@@ -101,6 +102,36 @@ void renderFrame(SDL_Renderer *renderer, byte display[SCREEN_HEIGHT][SCREEN_WIDT
     }
 }
 
+
+
+void logicDecode(byte X, byte Y, byte N, byte *regs) {
+    switch(N) {
+        case 0x0:
+            regs[X] = regs[Y];
+        case 0x1:
+            regs[X] |= regs[Y];
+        case 0x2:
+            regs[X] &= regs[Y];
+        case 0x3:
+            regs[X] ^= regs[Y];
+        case 0x4:
+            regs[0xF] = regs[X] + regs[Y] < regs[X] ? 1 : 0;
+            regs[X] += regs[Y];
+        case 0x5:
+            regs[0xF] = regs[X] > regs[Y];
+            regs[X] -= regs[Y];
+        case 0x6:
+            regs[0xF] = regs[X] & 1;
+            regs[X] >>= 1;
+        case 0x7:
+            regs[0xF] = regs[Y] > regs[X];
+            regs[X] = regs[Y] - regs[X];
+        case 0xE:
+            regs[0xF] = regs[X] & (1 << 7);
+            regs[X] <<= 1;
+    }
+}
+
 // remember to add error checking where needed (i.e. SDL_INIT)
 int main(int argc, char *argv[]) {
     if (argc != 2) return -1;
@@ -149,6 +180,9 @@ int main(int argc, char *argv[]) {
 
     bool quit = false;
     unsigned short opcode;
+    std::random_device dev;
+    std::mt19937 rng{dev()};
+    std::uniform_int_distribution<std::mt19937::result_type> distFF(0, 0xFF);
 
     while (!quit) {
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
@@ -166,20 +200,38 @@ int main(int argc, char *argv[]) {
 
         switch(opcode & 0xF000) {
             case 0x0000:
-                clear(renderer, display);
-                std::cout << "clear" << std::endl;
+                switch(NN) {
+                    case 0xE0:
+                        clear(renderer, display);
+                        std::cout << "clear" << std::endl;
+                    case 0xEE:
+                        PC = return_addrs.top();
+                        return_addrs.pop();
+                        std::cout << "return" << std::endl;
+                    default:
+                        std::cout << "decode error" << std::endl;
+                }
                 break;
             case 0x1000:
                 PC = NNN;
                 std::cout << "jump" << std::endl;
                 break;
             case 0x2000:
+                return_addrs.push(PC);
+                PC = NNN;
+                std::cout << "call" << std::endl;
                 break;
             case 0x3000:
+                PC += regs[X] == NN ? 2 : 0;
+                std::cout << "conditonal" << std::endl;
                 break;
             case 0x4000:
+                PC += regs[X] == NN ? 0 : 2;
+                std::cout << "conditonal" << std::endl;
                 break;
             case 0x5000:
+                PC += regs[X] == regs[Y]  ? 2 : 0;
+                std::cout << "conditonal" << std::endl;
                 break;
             case 0x6000:
                 regs[X] = NN;
@@ -190,16 +242,24 @@ int main(int argc, char *argv[]) {
                 std::cout << "add to register" << std::endl;
                 break;
             case 0x8000:
+                logicDecode(X, Y, N, regs);
+                std::cout << "logical operation" << std::endl;
                 break;
             case 0x9000:
+                PC += regs[X] == regs[Y]  ? 0 : 2;
+                std::cout << "conditonal" << std::endl;
                 break;
             case 0xA000:
                 I = NNN;
                 std::cout << "set I" << std::endl;
                 break;
             case 0xB000:
+                PC = NNN + regs[X];
+                std::cout << "jump offset" << std::endl;
                 break;
             case 0xC000:
+                regs[X] = distFF(rng) & NN;
+                std::cout << "rand" << std::endl;
                 break;
             case 0xD000:
                 draw(regs, X,  Y, N, I, display);
