@@ -1,11 +1,12 @@
-#include "SDL/SDL_render.h"
-#include "SDL/SDL_video.h"
 #include <SDL/SDL.h>
+#include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <cstring>
 #include <fstream>
 #include <random>
+#include <ratio>
 #include <stack>
 typedef unsigned char byte;
 
@@ -26,45 +27,6 @@ byte sound_timer;
 
 // Registers
 byte regs[16];
-
-void handleKeyboard(SDL_Scancode scancode) {
-    switch (scancode) {
-        case SDL_SCANCODE_1:
-            break;
-        case SDL_SCANCODE_2:
-            break;
-        case SDL_SCANCODE_3:
-            break;
-        case SDL_SCANCODE_4:
-            break;
-        case SDL_SCANCODE_Q:
-            break;
-        case SDL_SCANCODE_W:
-            break;
-        case SDL_SCANCODE_E:
-            break;
-        case SDL_SCANCODE_R:
-            break;
-        case SDL_SCANCODE_A:
-            break;
-        case SDL_SCANCODE_S:
-            break;
-        case SDL_SCANCODE_D:
-            break;
-        case SDL_SCANCODE_F:
-            break;
-        case SDL_SCANCODE_Z:
-            break;
-        case SDL_SCANCODE_X:
-            break;
-        case SDL_SCANCODE_C:
-            break;
-        case SDL_SCANCODE_V:
-            break;
-        default:
-            break;
-    }
-}
 
 void clear(SDL_Renderer *renderer, byte display[SCREEN_HEIGHT][SCREEN_WIDTH]) {
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
@@ -132,6 +94,61 @@ void logicDecode(byte X, byte Y, byte N, byte *regs) {
     }
 }
 
+char getKey(const SDL_Scancode &key) {
+    switch (key) {
+        case SDL_SCANCODE_0:
+            std::cout << "key print 0" << std::endl;
+            return 0;
+        case SDL_SCANCODE_1:
+            return 1;
+        case SDL_SCANCODE_2:
+            return 2;
+        case SDL_SCANCODE_3:
+            return 3;
+        case SDL_SCANCODE_4:
+            return 4;
+        case SDL_SCANCODE_5:
+            return 5;
+        case SDL_SCANCODE_6:
+            return 6;
+        case SDL_SCANCODE_7:
+            return 7;
+        case SDL_SCANCODE_8:
+            return 8;
+        case SDL_SCANCODE_9:
+            return 9;
+        case SDL_SCANCODE_A:
+            return 10;
+        case SDL_SCANCODE_B:
+            return 11;
+        case SDL_SCANCODE_C:
+            return 12;
+        case SDL_SCANCODE_D:
+            return 13;
+        case SDL_SCANCODE_E:
+            return 14;
+        case SDL_SCANCODE_F:
+            std::cout << "key print F" << std::endl;
+            return 15;
+        default:
+            return 16;
+    }
+}
+
+template<int FPS>
+class Timer {
+    using frameDuration = std::chrono::duration<double, std::ratio<1, FPS>>;
+    std::chrono::time_point<std::chrono::steady_clock, frameDuration> tp;
+public:
+    Timer(): tp{std::chrono::steady_clock::now()} {}
+    static constexpr frameDuration frameTick{1};
+
+    void sleep() {
+        tp += frameTick;
+        while (std::chrono::steady_clock::now() < tp) {}
+    }
+};
+
 // remember to add error checking where needed (i.e. SDL_INIT)
 int main(int argc, char *argv[]) {
     if (argc != 2) return -1;
@@ -184,6 +201,7 @@ int main(int argc, char *argv[]) {
     std::mt19937 rng{dev()};
     std::uniform_int_distribution<std::mt19937::result_type> distFF(0, 0xFF);
 
+    Timer<60> frameCap; 
     while (!quit) {
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
         SDL_RenderClear(renderer);
@@ -197,6 +215,9 @@ int main(int argc, char *argv[]) {
         byte Y = (opcode & 0x00F0) >> 4;
         byte N = opcode & 0x000F;
         byte NN = opcode & 0x00FF;
+
+        bool isGetKey = false;
+        bool isKeyCheck = false;
 
         switch(opcode & 0xF000) {
             case 0x0000:
@@ -266,21 +287,73 @@ int main(int argc, char *argv[]) {
                 std::cout << "display" << std::endl;
                 break;
             case 0xE000:
+                {
+                    SDL_PollEvent(&e);
+                    bool isPressed = e.type == SDL_KEYDOWN && getKey(e.key.keysym.scancode) == regs[X];
+                    if (NN == 0x9E) {
+                        PC += isPressed ? 2 : 0;
+                    } else if (NN == 0xA1) {
+                        PC += isPressed ? 0 : 2; 
+                    }
+                    std::cout << "key check" << std::endl;
+                }
                 break;
             case 0xF000:
+                switch (NN) {
+                    case 0x07:
+                        regs[X] = delay_timer;
+                        break;
+                    case 0x15:
+                        delay_timer = regs[X];
+                        break;
+                    case 0x18:
+                        sound_timer = regs[X];
+                        break;
+                    case 0x1E:
+                        regs[0xF] = I + regs[X] > 0x1000 || I + regs[X] < I;
+                        I += regs[X];
+                        break;
+                    case 0x0A:
+                        isGetKey = true;
+                        break;
+                    case 0x29:
+                        I =  80 + regs[X];
+                        break;
+                    case 0x33:
+                        for (int i = 0; i < 3; ++i) {
+                            MEM[I + i] = (regs[X] / (int) pow(10, 2 - i)) % 10;
+                        }
+                        break;
+                    case 0x55:
+                        break;
+                    case 0x65:
+                        break;
+                }
                 break;
         }
 
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_QUIT) {
                 quit = true;
-            } else if (e.type == SDL_KEYDOWN) {
-                handleKeyboard(e.key.keysym.scancode);
+            } else if (isGetKey) {
+                if (e.type == SDL_KEYDOWN) {
+                    regs[X] = getKey(e.key.keysym.scancode);
+                } else {
+                    PC -= 2;
+                }
+                isGetKey = false;
             }
+        }
+
+        if (sound_timer > 0) {
+            std::cout << '\a';
         }
 
         renderFrame(renderer, display);
         SDL_RenderPresent(renderer);
+        delay_timer -= delay_timer > 0 ? 1 : 0;
+        sound_timer -= sound_timer > 0 ? 1 : 0;
+        frameCap.sleep();
     }
 
     SDL_DestroyRenderer(renderer);
